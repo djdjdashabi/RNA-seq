@@ -1,0 +1,22 @@
+runs:
+  - "69"
+  - "70"
+
+sample_ids:
+  "69": "SRR37043569"
+  "70": "SRR37043570"
+
+python_executable: "/home/djdjd/miniforge3/envs/snakemake_env/bin/python3"
+
+references:
+  gtf: "../annotation/Homo_sapiens.GRCh38.110.gtf"
+  alu_bed: "../annotation/GRCh38_RepeatMasker_Alu.sorted.bed"
+  gene_info_source: "/home/djdjd/essay/resources/downloads/Homo_sapiens.gene_info.gz"
+  gene2go_source: "/home/djdjd/essay/resources/downloads/gene2go.gz"
+  gene_info_human: "../annotation/gene_info_human.tsv.gz"
+  gene2go_human: "../annotation/gene2go_human.tsv.gz"
+  gene2go_manifest: "../annotation/gene2go_build_manifest.tsv"
+
+parameters:
+  go_fdr: 0.05
+
