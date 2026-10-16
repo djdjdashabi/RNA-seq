@@ -1,0 +1,111 @@
+# Run from the project root after the initial cd Supplemental_files.
+# Complete the corresponding manuscript input-preparation steps first.
+
+cd Supplemental_files
+mkdir -p reference annotation bam results scripts logs
+
+conda activate rnaseq
+fastp --version; hisat2 --version | head -1; samtools --version | head -1
+gatk --version; picard MarkDuplicates --version
+python3 -c "import reditools; print(getattr(reditools, '__version__', 'record package build'))"
+
+conda activate snakemake_env
+snakemake --version; python3 --version
+
+for f in SRR37043569_{1,2}.fastq.gz SRR37043570_{1,2}.fastq.gz; do
+  test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+done
+gzip -t SRR37043569_1.fastq.gz SRR37043569_2.fastq.gz
+gzip -t SRR37043570_1.fastq.gz SRR37043570_2.fastq.gz
+
+for run in SRR37043569 SRR37043570; do
+  for mate in 1 2; do
+    printf '%s_%s\t' "$run" "$mate"
+    gzip -cd "${run}_${mate}.fastq.gz" | awk 'END{print NR/4}'
+  done
+done
+
+conda activate rnaseq
+fastp \
+  -i SRR37043569_1.fastq.gz -I SRR37043569_2.fastq.gz \
+  -o SRR37043569_1.clean.fastq.gz -O SRR37043569_2.clean.fastq.gz \
+  --detect_adapter_for_pe --trim_poly_g \
+  --qualified_quality_phred 20 --length_required 30 \
+  -h logs/SRR37043569_fastp.html -j logs/SRR37043569_fastp.json
+
+for f in reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+  annotation/Homo_sapiens.GRCh38.110.gtf annotation/rmsk.txt \
+  annotation/GRCh38_RepeatMasker_Alu.sorted.bed; do
+  test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+done
+awk '/^>/{sub(/^>/,""); print $1}' reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa | sort -u > logs/fasta_contigs.txt
+awk '$0 !~ /^#/{print $1}' annotation/Homo_sapiens.GRCh38.110.gtf | sort -u > logs/gtf_contigs.txt
+comm -23 logs/gtf_contigs.txt logs/fasta_contigs.txt
+
+(
+cd reference || exit 1
+samtools faidx Homo_sapiens.GRCh38.dna.primary_assembly.fa
+gatk CreateSequenceDictionary \
+  -R Homo_sapiens.GRCh38.dna.primary_assembly.fa
+hisat2-build Homo_sapiens.GRCh38.dna.primary_assembly.fa genome_index
+)
+
+conda activate snakemake_env
+(
+cd scripts || exit 1
+python3 build_gene2go.py
+)
+
+conda activate rnaseq
+hisat2 -p 4 -x reference/genome_index \
+  -1 SRR37043569_1.clean.fastq.gz -2 SRR37043569_2.clean.fastq.gz \
+  --summary-file logs/SRR37043569_hisat2_summary.txt \
+  -S SRR37043569.sam
+samtools sort -@ 4 -o bam/SRR37043569.sorted.bam SRR37043569.sam
+samtools index bam/SRR37043569.sorted.bam
+
+picard MarkDuplicates \
+  I=bam/SRR37043569.sorted.bam O=bam/SRR37043569.dedup.bam \
+  M=logs/SRR37043569_dedup_metrics.txt CREATE_INDEX=true
+gatk SplitNCigarReads \
+  -R reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+  -I bam/SRR37043569.dedup.bam -O bam/SRR37043569.final.bam
+samtools index bam/SRR37043569.final.bam
+samtools quickcheck -v bam/SRR37043569.final.bam
+
+conda activate rnaseq
+python3 -m reditools analyze \
+  bam/SRR37043569.final.bam \
+  -r reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+  -o results/redi_69.out \
+  -t 8 -l 6 -q 12 -bq 15
+
+conda activate sprint_py2
+(
+cd SPRINT || exit 1
+python2 sprint_from_bam.py \
+  ../bam/SRR37043569.final.bam \
+  ../reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+  ../results/sprint_69_out "$(which samtools)"
+cp ../results/sprint_69_out/SPRINT_identified_regular.res \
+  ../results/sprint_69.out
+)
+
+conda activate jacusa
+(
+cd JACUSA2 || exit 1
+java -Xmx8G -jar JACUSA_v2.1.16.jar call-1 \
+  -R ../reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+  -r ../results/jacusa_69.out \
+  -c 10 -m 20 -q 20 -p 8 \
+  ../bam/SRR37043569.final.bam
+)
+
+conda activate snakemake_env
+(
+cd scripts || exit 1
+python3 build_gene2go.py
+snakemake -j 8
+)
+
+(cd scripts && snakemake -j 8)
