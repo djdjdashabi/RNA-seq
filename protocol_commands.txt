@@ -1,16 +1,28 @@
-# Run from the project root after the initial cd Supplemental_files.
-# Complete the corresponding manuscript input-preparation steps first.
+# Complete environment preparation and input staging before analysis.
+# Initial deployment is from the parent directory; later blocks run from Supplemental_files/.
+# Skip git clone when scripts are already staged.
 
+# New GitHub-based project only; skip cloning if scripts are already staged.
+mkdir -p Supplemental_files
+git clone https://github.com/djdjdashabi/RNA-seq.git Supplemental_files/scripts
 cd Supplemental_files
-mkdir -p reference annotation bam results scripts logs
+mkdir -p reference annotation bam results logs
 
 conda activate rnaseq
+python3 --version
 fastp --version; hisat2 --version | head -1; samtools --version | head -1
 gatk --version; picard MarkDuplicates --version
-python3 -c "import reditools; print(getattr(reditools, '__version__', 'record package build'))"
+python3 -c "from importlib.metadata import version; print('reditools3', version('reditools3')); print('pysam', version('pysam'))"
+
+conda activate sprint_py2
+python2 --version; samtools --version | head -1
+
+conda activate jacusa
+java -version
 
 conda activate snakemake_env
 snakemake --version; python3 --version
+python3 -c "import numpy, scipy, matplotlib, yaml; print(numpy.__version__, scipy.__version__, matplotlib.__version__, yaml.__version__)"
 
 for f in SRR37043569_{1,2}.fastq.gz SRR37043570_{1,2}.fastq.gz; do
   test -s "$f" || { echo "missing or empty: $f"; exit 1; }
@@ -104,7 +116,6 @@ java -Xmx8G -jar JACUSA_v2.1.16.jar call-1 \
 conda activate snakemake_env
 (
 cd scripts || exit 1
-python3 build_gene2go.py
 snakemake -j 8
 )
 
