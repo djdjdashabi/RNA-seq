@@ -14,7 +14,6 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-DEFAULT_DOWNLOADS = PROJECT_ROOT.parent / "essay" / "resources" / "downloads"
 
 SCHEMAS = {
     "gene_info": {"#tax_id", "GeneID", "Symbol", "dbXrefs"},
@@ -27,7 +26,8 @@ class BuildError(ValueError):
 
 
 def resolve_default_source(filename: str) -> Path:
-    candidates = [PROJECT_ROOT / "annotation" / filename, DEFAULT_DOWNLOADS / filename]
+    # Keep the default inputs within the project; CLI options allow other sources.
+    candidates = [PROJECT_ROOT / "annotation" / filename]
     for candidate in candidates:
         if candidate.is_file():
             return candidate
